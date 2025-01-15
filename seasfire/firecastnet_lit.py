@@ -604,10 +604,16 @@ class FireCastNetLit(L.LightningModule):
         self.evaluate(batch, "test")
 
     def predict_step(self, batch):
-        x = batch.get("x")
-        oci = batch.get("oci")
-        y = batch.get("y")
-        clima = batch.get("clima")
+        if len(batch)==1:
+            x = batch
+            oci = None 
+            y = None
+            clima = None
+        else:
+            x = batch.get("x")
+            oci = batch.get("oci")
+            y = batch.get("y")
+            clima = batch.get("clima")
 
         x, oci, y, clima = self._prepare_data(x, oci, y, clima)
         logits = self(x, oci)
