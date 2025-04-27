@@ -133,7 +133,6 @@ class ConvGRULit(L.LightningModule):
     def training_step(self, batch, batch_idx):
         x = batch.get("x")
         y = batch.get("y")
-
         x, y = self._prepare_data(x, y)
         logits = self(x)
 
@@ -148,7 +147,6 @@ class ConvGRULit(L.LightningModule):
     def evaluate(self, batch, stage=None):
         x = batch.get("x")
         y = batch.get("y")
-
         x, y = self._prepare_data(x, y)
         logits = self(x)
 
@@ -180,7 +178,6 @@ class ConvGRULit(L.LightningModule):
     def predict_step(self, batch):
         x = batch.get("x")
         y = batch.get("y")
-        
         x, y = self._prepare_data(x, y)
 
         logits = self(x)

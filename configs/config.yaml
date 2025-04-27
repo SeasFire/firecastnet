@@ -59,7 +59,7 @@ trainer:
   reload_dataloaders_every_n_epochs: 0
   default_root_dir: null
 model:
-  class_path: FireCastNet
+  class_path: seasfire.firecastnet_lit.FireCastNetLit
   init_args:
     icospheres_graph_path: icospheres/icospheres_0_1_2_3_4_5_6.json.gz
     sp_res: 0.250
@@ -68,11 +68,11 @@ model:
     max_lon: 179.875
     min_lon: -179.875
     lat_lon_static_data: true
-    timeseries_len: 24
+    timeseries_len: 12
     embed_cube: true
     embed_cube_width: 4
     embed_cube_height: 4
-    embed_cube_time: 24
+    embed_cube_time: 12
     embed_cube_dim: 64
     embed_cube_layer_norm: true
     embed_cube_vit_enable: false
@@ -101,26 +101,6 @@ model:
     do_concat_trick: false
     regression_loss: mse
     cube_path: "cube.zarr"
-    gfed_region_enable_loss_weighting: false
-    gfed_region_var_name: "gfed_region"
-    gfed_region_weights: 
-      0: 0.0
-      1: 4.68
-      2: 3.92
-      3: 3.85
-      4: 3.64
-      5: 1.84
-      6: 4.73
-      7: 4.63
-      8: 1.57
-      9: 1.20
-      10: 3.19
-      11: 2.47
-      12: 2.87
-      13: 4.52
-      14: 3.03
-    climatology_enable_loss: false
-    climatology_lambda: 0.1
     lsm_filter_enable: true
     lsm_var_name: "lsm"
     lsm_threshold: 0.1
@@ -159,9 +139,6 @@ data:
   - oci_soi
   - oci_wp  
   oci_lag: 14
-  climatology_enabled: false
-  climatology_cube: "climatology.zarr"  
-  climatology_var_name: clim_gwis_ba_octodays_mean  
   log_preprocess_input_vars:
   - tp
   - pop_dens
@@ -169,7 +146,7 @@ data:
   target_shift: 16
   target_var_per_area: false
   target_var_log_process: false
-  timeseries_weeks: 24
+  timeseries_weeks: 12
   lat_dim: null 
   lon_dim: null
   lat_dim_overlap: null
