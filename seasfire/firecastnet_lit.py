@@ -16,7 +16,8 @@ from torchmetrics import (
     SymmetricMeanAbsolutePercentageError,
 )
 
-from .backbones.graphcast.loss.regression_area_loss import (
+from .backbones.loss.fcn_cls_loss import FCNClassificationLoss
+from .backbones.loss.regression_area_loss import (
     CellAreaWeightedL1LossFunction,
     CellAreaWeightedMSELossFunction,
     CellAreaWeightedHuberLossFunction,
@@ -72,6 +73,11 @@ class FireCastNetLit(L.LightningModule):
         task: str = "classification",
         regression_loss: str = "mse",
         cube_path: str = "cube.zarr",
+        gfed_region_enable_loss_weighting: bool = False,
+        gfed_region_var_name="gfed_region",
+        gfed_region_weights=None,        
+        val_gfed_regions: list[str] | None = None,
+        test_gfed_regions: list[str] | None = None,
         lsm_filter_enable=True,
         lsm_var_name: str = "lsm",
         lsm_threshold: float = 0.05,
@@ -106,6 +112,15 @@ class FireCastNetLit(L.LightningModule):
 
         self._cube_path = cube_path
 
+        self._init_gfed_regions(
+            gfed_region_enable_loss_weighting,
+            gfed_region_var_name,
+            gfed_region_weights,
+            val_gfed_regions,
+            test_gfed_regions,
+        )
+
+        self.register_buffer("_lsm_mask", torch.empty(0), persistent=True)
         self._init_lsm_filter(
             lsm_filter_enable,
             lsm_var_name,
@@ -264,6 +279,79 @@ class FireCastNetLit(L.LightningModule):
                 "Increased input dimensions to {}".format(self._input_dim_grid_nodes)
             )
 
+    def _init_gfed_regions(
+        self,
+        gfed_region_enable_loss_weighting,
+        gfed_region_var_name,
+        gfed_region_weights,
+        val_gfed_regions,
+        test_gfed_regions,
+        dtype=torch.float32,
+    ):
+        self._gfed_region_enable_loss_weighting = gfed_region_enable_loss_weighting
+        self._val_gfed_region_mask = None
+        self._test_gfed_region_mask = None 
+
+        if val_gfed_regions is None: 
+            val_gfed_regions = []
+        if test_gfed_regions is None: 
+            test_gfed_regions = [] 
+            
+        logger.info("Validation GFED regions: {}".format(val_gfed_regions))
+        self._val_gfed_regions = [self._map_region_to_int(region) for region in val_gfed_regions]
+
+        logger.info("Test GFED regions: {}".format(test_gfed_regions))
+        self._test_gfed_regions = [self._map_region_to_int(region) for region in test_gfed_regions]
+
+        logger.info("Opening cube zarr file: {}".format(self._cube_path))
+        cube = xr.open_zarr(self._cube_path, consolidated=False)
+        gfed_region = cube[gfed_region_var_name].values
+        gfed_region = torch.tensor(gfed_region, dtype=dtype)
+        cube.close()
+
+        if len(self._val_gfed_regions) > 0: 
+            self._val_gfed_region_mask = torch.isin(gfed_region, torch.tensor(self._val_gfed_regions, dtype=gfed_region.dtype))
+
+        if len(self._test_gfed_regions) > 0: 
+            self._test_gfed_region_mask = torch.isin(gfed_region, torch.tensor(self._test_gfed_regions, dtype=gfed_region.dtype))        
+
+        if not gfed_region_enable_loss_weighting:
+            return
+
+        logger.info("Enabling GFED region weighting")
+
+        # Map GFED regions to weights
+        weight_map = torch.zeros_like(gfed_region, dtype=dtype)
+        for region_name, weight in gfed_region_weights.items():
+            region_int = self._map_region_to_int(region_name)
+            weight_map = torch.where(gfed_region == region_int, weight, weight_map)
+
+        self._gfed_region_weights = weight_map.unsqueeze(0)
+
+        logger.info(
+            "GFED regions tensor with shape: {}".format(self._gfed_region_weights)
+        )
+
+    def _map_region_to_int(self, region: str) -> int:
+        region_name_to_int = {
+            "OCEAN": 0,
+            "BONA": 1,
+            "TENA": 2,
+            "CEAM": 3,
+            "NHSA": 4,
+            "SHSA": 5,
+            "EURO": 6,
+            "MIDE": 7,
+            "NHAF": 8,
+            "SHAF": 9,
+            "BOAS": 10,
+            "CEAS": 11,
+            "SEAS": 12,
+            "EQAS": 13,
+            "AUST": 14,
+        }
+        return region_name_to_int.get(region, -1)  # Default to -1 for unknown regions
+
     def _init_lsm_filter(
         self,
         lsm_filter_enable,
@@ -285,7 +373,7 @@ class FireCastNetLit(L.LightningModule):
         lsm_filter = cube[lsm_var_name].values
         lsm_filter = torch.tensor(lsm_filter, dtype=dtype).unsqueeze(0)
         lsm_mask = lsm_filter < lsm_threshold
-        self.register_buffer("_lsm_mask", lsm_mask)
+        self._lsm_mask = lsm_mask
         cube.close()
 
         logger.info("LSM filter/mask tensor with shape: {}".format(self._lsm_mask))
@@ -294,7 +382,13 @@ class FireCastNetLit(L.LightningModule):
         self._task = task
 
         if task == "classification":
-            self._criterion = nn.BCEWithLogitsLoss()
+            self._criterion = FCNClassificationLoss(
+                pixel_weights=(
+                    self._gfed_region_weights
+                    if self._gfed_region_enable_loss_weighting
+                    else None
+                ), 
+            )
             self._metrics_names = ["auc", "f1", "auprc"]
             self._val_metrics = nn.ModuleList(
                 [
@@ -532,6 +626,17 @@ class FireCastNetLit(L.LightningModule):
 
         preds = preds.view(-1)
         y = y.view(-1)
+
+        if stage == "val" and self._val_gfed_region_mask is not None:
+            mask = self._val_gfed_region_mask.view(-1)
+            preds = preds[mask]
+            y = y[mask]
+
+        if stage == "test" and self._test_gfed_region_mask is not None:
+            mask = self._test_gfed_region_mask.view(-1)
+            preds = preds[mask]
+            y = y[mask]
+
         for idx, metric in enumerate(metrics):
             name = metrics_names[idx]
             metric.update(preds, y)
@@ -574,7 +679,7 @@ class FireCastNetLit(L.LightningModule):
 
                 optimizer = FusedAdam(self.parameters(), lr=self._lr, betas=(0.9, 0.95))
             except ImportError:
-                logger.warn(
+                logger.warning(
                     "NVIDIA Apex (https://github.com/nvidia/apex) is not installed, FusedAdam optimizer will not be used."
                 )
 
@@ -590,7 +695,7 @@ class FireCastNetLit(L.LightningModule):
         logger.info(f"Using {optimizer.__class__.__name__} optimizer")
 
         if self._max_epochs <= 10:
-            logger.warn(f"Max epochs {self._max_epochs} should be larger that 10")
+            logger.warning(f"Max epochs {self._max_epochs} should be larger that 10")
         lr_scheduler1 = torch.optim.lr_scheduler.LinearLR(
             optimizer, start_factor=0.3, end_factor=1, total_iters=10
         )
