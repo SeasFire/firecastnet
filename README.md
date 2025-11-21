@@ -54,6 +54,12 @@ Download the [SeasFire dataset](https://zenodo.org/record/8055879) from zenodo. 
 
 Unzip the dataset to a folder of your choice. Reference the dataset from the config file.
 
+### Checkpoints
+
+Various model checkpoints, global or per localized per GFED-region can be found at
+[hugging-face](https://huggingface.co/datasets/d-michail/firecastnet-artifacts). See file `inference_fcn.py`
+on how to use them.
+
 ## Tools
 
 A few helper scripts can be found in this repository.
