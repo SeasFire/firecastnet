@@ -1,5 +1,13 @@
 
-# FireCastNet
+# FireCastNet - Earth-as-a-Graph for Seasonal Fire Prediction
+
+## Approach
+
+FireCastNet focuses on forecasting seasonal wildfire activity at a global scale by learning how climate, vegetation, and human factors interact over space and time. The key idea is to represent the Earth as a connected system, where conditions in one region can influence fire activity far away through large-scale climate patterns. FireCastNet first encodes spatio-temporal information from multiple Earth system variables, then models long-range dependencies using a graph-based neural network inspired by recent advances in weather forecasting, capturing both local fire drivers and global teleconnections to enable burned-area predictions several months in advance.
+
+![FireCastNet](/figures/firecastnet.png)
+
+## Overview
 
 Uses Lightning CLI and supports multiple models. Configuration files are located in `configs/`.
 
@@ -56,7 +64,7 @@ Unzip the dataset to a folder of your choice. Reference the dataset from the con
 
 ### Checkpoints
 
-Various model checkpoints, global or per localized per GFED-region can be found at
+Various model checkpoints, global or localized per GFED-region can be found at
 [hugging-face](https://huggingface.co/datasets/d-michail/firecastnet-artifacts). See file `inference_fcn.py`
 on how to use them.
 
@@ -67,7 +75,27 @@ A few helper scripts can be found in this repository.
 - `inference_fcn.py`: Given a cube and a FireCastNet model checkpoint, perform inference and produce a cube containing the predictions as a variable.
 - `compute_metrics.py`: Given a cube with a variable with predictions (for classification), output global and per GFED region metrics.
 - `compute_cls_baselines.py`: Compute classification baselines and output them as variables in a cube.
-- `compute_feature_importance.py`: Compute feature importance using Integrated Gradients from captum.
+- `compute_feature_importance.py`: Compute feature importance using Integrated Gradients from [captum](https://captum.ai/).
+
+## Citation
+
+```bibtex
+@article{Michail2025FireCastNet,
+  title   = {FireCastNet: Earth-as-a-Graph for Seasonal Fire Prediction},
+  author  = {Michail, Dimitrios and
+             Davalas, Charalampos and
+             Chafis, Konstantinos and
+             Panagiotou, Lefki-Ioanna and
+             Prapas, Ioannis and
+             Bountos, Nikolaos Ioannis and
+             Kondylatos, Spyros and
+             Papoutsis, Ioannis},
+  journal = {Scientific Reports},
+  publisher = {Nature Publishing Group UK},
+  year    = {2025},
+  month   = dec
+}
+```
 
 ## Acknowledgements
 
